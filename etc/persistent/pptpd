@@ -1,0 +1,49 @@
+#!/bin/sh
+
+#ppp.1.name=USERNAME
+#ppp.1.password=PASSWORD
+#ppp.1.status=disabled
+#ppp.status=disabled
+#pptp.1.serverip=PPTPD_SERVER_IP
+#pptp.status=enabled
+
+cfg="/tmp/system.cfg"
+
+pptp=`cat $cfg | grep pptp.status=enabled`
+if [ ! -z $pptp ]; then
+	logger -t poststart "PPTP Enabled"
+	logger -t poststart "Configuring PPPd"
+	username=`cat $cfg | grep ppp.1.username= | sed s/ppp.1.username=//`
+	password=`cat $cfg | grep ppp.1.password= |sed s/ppp.1.password=//`
+	server=`cat $cfg | grep pptp.1.server= |sed s/pptp.1.server=//`
+	#gateway=`cat $cfg | grep route.1.gateway= |sed s/route.1.gateway=//`
+	#echo "\"$user\" * \"$pass\" *" > /etc/ppp/pap-secrets
+	echo "\"$username\" * \"$password\" *" > /etc/ppp/chap-secrets
+	cat <<-EOF > /etc/ppp/options.pptp
+		lock noauth nobsdcomp nodeflate persist holdoff 5
+	EOF
+
+	mkdir -p /etc/ppp/peers 2> /dev/null
+	cat <<-EOF > /etc/ppp/peers/pptp
+		pty "pptp $server --nolaunchpppd"
+		noproxyarp
+		name $username
+		#defaultroute
+		remotename PPTP
+		file /etc/ppp/options.pptp
+		ipparam pptp
+		require-mppe-128
+		nobsdcomp
+		nodeflate
+		lock
+		noauth
+		refuse-eap
+		mtu 1400
+		mru 1400
+	EOF
+	
+	logger -t poststart "Setting up gateway"
+	logger -t poststart "Calling PPTP server"
+	/sbin/pppd call pptp
+	echo "$?"
+fi
